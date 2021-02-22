@@ -32,6 +32,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.tecforte.blog.domain.enumeration.Emoji;
+
+import com.tecforte.blog.service.BlogService;
 /**
  * Integration tests for the {@link EntryResource} REST controller.
  */
@@ -75,10 +77,14 @@ public class EntryResourceIT {
 
     private Entry entry;
 
+	@Autowired
+	private BlogService blogService;
+	
     @BeforeEach
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        final EntryResource entryResource = new EntryResource(entryService);
+	
+        final EntryResource entryResource = new EntryResource(entryService, blogService);
         this.restEntryMockMvc = MockMvcBuilders.standaloneSetup(entryResource)
             .setCustomArgumentResolvers(pageableArgumentResolver)
             .setControllerAdvice(exceptionTranslator)

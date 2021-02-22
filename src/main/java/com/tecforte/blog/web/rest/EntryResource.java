@@ -25,6 +25,9 @@ import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
 
+import com.tecforte.blog.service.BlogService;
+import com.tecforte.blog.service.dto.BlogDTO;
+import java.util.Arrays;
 /**
  * REST controller for managing {@link com.tecforte.blog.domain.Entry}.
  */
@@ -41,9 +44,12 @@ public class EntryResource {
 
     private final EntryService entryService;
 
-    public EntryResource(EntryService entryService) {
+    public EntryResource(EntryService entryService, BlogService blogService) {
         this.entryService = entryService;
+		this.blogService = blogService;
     }
+	
+	private final BlogService blogService;
 
     /**
      * {@code POST  /entries} : Create a new entry.
@@ -53,15 +59,65 @@ public class EntryResource {
      * @throws URISyntaxException if the Location URI syntax is incorrect.
      */
     @PostMapping("/entries")
-    public ResponseEntity<EntryDTO> createEntry(@Valid @RequestBody EntryDTO entryDTO) throws URISyntaxException {
+    public ResponseEntity<EntryDTO> createEntry(@Valid @RequestBody EntryDTO entryDTO) throws URISyntaxException {		
         log.debug("REST request to save Entry : {}", entryDTO);
         if (entryDTO.getId() != null) {
             throw new BadRequestAlertException("A new entry cannot already have an ID", ENTITY_NAME, "idexists");
         }
-        EntryDTO result = entryService.save(entryDTO);
-        return ResponseEntity.created(new URI("/api/entries/" + result.getId()))
-            .headers(HeaderUtil.createEntityCreationAlert(applicationName, false, ENTITY_NAME, result.getId().toString()))
-            .body(result);
+
+		EntryDTO result = null;
+		
+		Optional<BlogDTO> blogDTO = blogService.findOne(entryDTO.getBlogId());
+		
+		if ( blogDTO.isPresent()){
+			System.out.println("Blog found! Getting positive value now.");
+						
+			boolean blogType = blogDTO.get().isPositive();
+			
+			String entryEmoji = entryDTO.getEmoji().name();
+
+			boolean checkPositive = false; //Check if blog is positive
+			boolean isNeutral = false;
+			
+			if (entryEmoji.equals("LIKE") || entryEmoji.equals("HAHA")){
+				checkPositive = true;
+			}else if (entryEmoji.equals("WOW")){
+				isNeutral = true;
+			}
+			
+			//Now checking if emojis are posted in the correct blog
+			if ((isNeutral == true) || (checkPositive == blogType)){
+				String txtcheck = entryDTO.getContent().toLowerCase();
+							
+				List<String> positiveWords = Arrays.asList("like", "love", "happy", "haha", "laugh" );
+				List<String> negativeWords = Arrays.asList("angry", "sad", "fear", "cry", "lonely" );
+				
+				//Checking for positive and negative keywords
+				if (positiveWords.stream().anyMatch(txtcheck::contains)) {
+					if (blogType == true)
+						result = entryService.save(entryDTO);
+					else
+						throw new BadRequestAlertException("Invalid Content.", ENTITY_NAME, "invalidContent");
+					
+				}else if (negativeWords.stream().anyMatch(txtcheck::contains)) {
+					if (blogType == false)
+						result = entryService.save(entryDTO);
+					else
+						throw new BadRequestAlertException("Invalid Content.", ENTITY_NAME, "invalidContent");
+				}else{
+					result = entryService.save(entryDTO);
+				}
+			}else{
+				throw new BadRequestAlertException("Invalid Emoji.", "Entry", "emoji");
+			}
+			
+		}else{	
+			System.out.println("Nothing found.");
+		}
+        
+		return ResponseEntity.created(new URI("/api/entries/" + result.getId()))
+			.headers(HeaderUtil.createEntityCreationAlert(applicationName, false, ENTITY_NAME, result.getId().toString()))
+			.body(result);
     }
 
     /**
@@ -79,7 +135,57 @@ public class EntryResource {
         if (entryDTO.getId() == null) {
             throw new BadRequestAlertException("Invalid id", ENTITY_NAME, "idnull");
         }
-        EntryDTO result = entryService.save(entryDTO);
+        //EntryDTO result = entryService.save(entryDTO);
+		EntryDTO result = null;
+		
+		Optional<BlogDTO> blogDTO = blogService.findOne(entryDTO.getBlogId());
+		
+		if ( blogDTO.isPresent()){
+			System.out.println("Blog found! Getting positive value now.");
+						
+			boolean blogType = blogDTO.get().isPositive();
+			
+			String entryEmoji = entryDTO.getEmoji().name();
+
+			boolean checkPositive = false; //Check if blog is positive
+			boolean isNeutral = false;
+			
+			if (entryEmoji.equals("LIKE") || entryEmoji.equals("HAHA")){
+				checkPositive = true;
+			}else if (entryEmoji.equals("WOW")){
+				isNeutral = true;
+			}
+			
+			//Now checking if emojis are posted in the correct blog
+			if ((isNeutral == true) || (checkPositive == blogType)){
+				String txtcheck = entryDTO.getContent().toLowerCase();
+							
+				List<String> positiveWords = Arrays.asList("like", "love", "happy", "haha", "laugh" );
+				List<String> negativeWords = Arrays.asList("angry", "sad", "fear", "cry", "lonely" );
+				
+				//Checking for positive and negative keywords
+				if (positiveWords.stream().anyMatch(txtcheck::contains)) {
+					if (blogType == true)
+						result = entryService.save(entryDTO);
+					else
+						throw new BadRequestAlertException("Invalid Content.", ENTITY_NAME, "invalidContent");
+					
+				}else if (negativeWords.stream().anyMatch(txtcheck::contains)) {
+					if (blogType == false)
+						result = entryService.save(entryDTO);
+					else
+						throw new BadRequestAlertException("Invalid Content.", ENTITY_NAME, "invalidContent");
+				}else{
+					result = entryService.save(entryDTO);
+				}
+			}else{
+				throw new BadRequestAlertException("Invalid Emoji.", "Entry", "emoji");
+			}
+			
+		}else{	
+			System.out.println("Nothing found.");
+		}
+		
         return ResponseEntity.ok()
             .headers(HeaderUtil.createEntityUpdateAlert(applicationName, false, ENTITY_NAME, entryDTO.getId().toString()))
             .body(result);
@@ -126,4 +232,79 @@ public class EntryResource {
         entryService.delete(id);
         return ResponseEntity.noContent().headers(HeaderUtil.createEntityDeletionAlert(applicationName, false, ENTITY_NAME, id.toString())).build();
     }
+		
+	/**
+	* Custom code
+	*/
+	
+	@DeleteMapping("/blogs/clean")
+    public ResponseEntity<Void> clean(@RequestParam List<String> keywords) throws URISyntaxException {
+        log.debug("REST request to delete Entry : {}", keywords);
+		
+		Pageable pageable = Pageable.unpaged();
+		
+		Page<EntryDTO> page = entryService.findAll(pageable);
+		List<EntryDTO> entries = page.getContent();
+		
+		System.out.println(entries.size());
+		int x = entries.size();
+
+		int y = 0;
+		
+		while (x > y){
+			//System.out.println("ENTRY "+entries.get(y).getContent());
+			
+			String txtcheck = entries.get(y).getContent();
+			
+			//if (txtcheck.matches(".*"+keywords+".*")) {
+			if (keywords.stream().anyMatch(txtcheck::contains)) {
+				//System.out.println("Keyword found, proceed with deletion.");
+				
+				Long deleted_EntryID = entries.get(y).getId();
+				
+				entryService.delete(deleted_EntryID);
+			}
+				//System.out.println("Keyword not found");
+	  
+			y++;
+		}
+        return ResponseEntity.noContent().headers(HeaderUtil.createEntityDeletionAlert(applicationName, false, ENTITY_NAME, keywords.toString())).build();
+    }
+	
+	@DeleteMapping("/blogs/{id}/clean")
+    public ResponseEntity<Void> clean(@RequestParam List<String> keywords, @Valid @PathVariable Long id) throws URISyntaxException {
+		log.debug("REST request to delete Entry : {}", keywords);
+		
+		Pageable pageable = Pageable.unpaged();
+		
+		Page<EntryDTO> page = entryService.findAll(pageable);
+		List<EntryDTO> entries = page.getContent();
+		
+		System.out.println(entries.size());
+		int x = entries.size();
+
+		int y = 0;
+		
+		while (x > y){
+			//System.out.println("ENTRY "+entries.get(y).getContent());
+			
+			String txtcheck = entries.get(y).getContent();
+			
+			//if (txtcheck.matches(".*"+keywords+".*")) {
+			Long blogID = entries.get(y).getBlogId();
+			
+			if (id.equals(blogID)){
+				if (keywords.stream().anyMatch(txtcheck::contains)) {
+					//System.out.println("Keyword found, proceed with deletion.");
+					
+					Long deleted_EntryID = entries.get(y).getId();
+						entryService.delete(deleted_EntryID);
+				}
+			}
+				//System.out.println("Keyword not found");
+	  
+			y++;
+		}
+        return ResponseEntity.noContent().headers(HeaderUtil.createEntityDeletionAlert(applicationName, false, ENTITY_NAME, keywords.toString())).build();
+	}
 }
